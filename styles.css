@@ -363,60 +363,15 @@ section {
   margin: 0 0 16px 28px;
 }
 
-/* ---------- Estimate form ---------- */
+/* ---------- Estimate CTA ---------- */
 .estimate {
   background: linear-gradient(180deg, var(--white) 0%, var(--gray-100) 100%);
 }
 
-.estimate-form {
-  max-width: 560px;
+.estimate-cta {
+  max-width: 400px;
   margin: 0 auto;
-  background: var(--white);
-  border: 1px solid var(--gray-300);
-  border-top: 6px solid var(--red);
-  border-radius: var(--radius);
-  padding: 32px;
-  box-shadow: var(--shadow-lg);
-}
-
-.form-row {
-  margin-bottom: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-row label {
-  font-weight: 700;
-  font-size: 0.9rem;
-}
-
-.form-row input,
-.form-row select,
-.form-row textarea {
-  padding: 12px 14px;
-  border: 1px solid var(--gray-300);
-  border-radius: 8px;
-  font-size: 1rem;
-  font-family: inherit;
-  background: var(--white);
-  color: var(--ink);
-}
-
-.form-row input:focus,
-.form-row select:focus,
-.form-row textarea:focus {
-  outline: 2px solid var(--yellow);
-  border-color: var(--red);
-}
-
-.hidden-field { display: none; }
-
-.form-note {
   text-align: center;
-  font-size: 0.9rem;
-  color: var(--red);
-  min-height: 1.2em;
 }
 
 /* ---------- Footer ---------- */
