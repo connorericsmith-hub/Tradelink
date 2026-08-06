@@ -1,0 +1,150 @@
+{
+  "_comment": [
+    "Fixtures for the 'no-website home services prospects' niche",
+    "(HVAC, plumbing, roofing, electrical, landscaping, garage door,",
+    "pest control, pressure washing, handyman). Every row is INVENTED.",
+    "",
+    "NOTE on 'drop' rows: the self-test runs must-drop fixtures in 'generous'",
+    "mode, which auto-fills a website onto every row that doesn't specify",
+    "one. Since this niche hard-denies any listing WITH a website",
+    "(filter.require_no_website), that means every drop row below will in",
+    "practice be caught by the website rule first, on top of whatever other",
+    "reason is named in `why`. That's still a correct assertion (all of",
+    "these must never export) — the independent proof that deny_terms,",
+    "primary_category_deny, max_reviews and toll-free detection ALSO catch",
+    "these on their own (without the website confound) was run separately",
+    "against the Classifier with website=None for each case.",
+    "",
+    "'keep' and 'low' rows run in exact mode (no auto-fill), so they",
+    "deliberately omit `website` — a keep row WITH a website would now be a",
+    "must-drop case, which is the point of this niche."
+  ],
+
+  "drop": [
+    {"why": "wrong trade entirely: remodeling, not one of the 9 target trades",
+     "name": "Sunrise Kitchen Remodeling", "primary": "Kitchen remodeler",
+     "categories": ["Kitchen remodeler"]},
+
+    {"why": "wrong trade in the name, off scope",
+     "name": "GreenScape Fence and Gate Co", "primary": "Fence contractor",
+     "categories": ["Fence contractor", "Landscaper"]},
+
+    {"why": "retail, not a service provider",
+     "name": "Ace Hardware Store", "primary": "Hardware store",
+     "categories": ["Hardware store"]},
+
+    {"why": "off-niche PRIMARY category even though it also carries an on-niche secondary tag",
+     "name": "Premier Design Build Group", "primary": "General contractor",
+     "categories": ["General contractor", "Electrician"]},
+
+    {"why": "franchise / high-volume operator, above the review ceiling",
+     "name": "ProServ HVAC of the Southeast", "primary": "HVAC contractor",
+     "categories": ["HVAC contractor"], "reviews": 600, "rating": 4.5},
+
+    {"why": "toll-free number: a call centre that is billed but cannot reply",
+     "name": "National Roofing Pros", "primary": "Roofing contractor",
+     "categories": ["Roofing contractor"], "phone": "+18005550142"},
+
+    {"why": "wrong business model: lead-gen platform, not an operator",
+     "name": "Thumbtack Home Services Directory", "primary": "Business service",
+     "categories": ["Business service"]},
+
+    {"why": "wrong business model: web design agency, not a trade business",
+     "name": "Bright Path Web Design Co", "primary": "Website designer",
+     "categories": ["Website designer"]},
+
+    {"why": "property manager, not an operator",
+     "name": "Cardinal Property Management", "primary": "Property management company",
+     "categories": ["Property management company"]},
+
+    {"why": "trade association: the listed number is the directory's own",
+     "name": "State Electrical Contractors Association", "primary": "Trade association",
+     "categories": ["Trade association", "Electrician"]},
+
+    {"why": "venue whose CATEGORY is the disqualifier, name reads on-niche",
+     "name": "Church Street Grill", "primary": "Restaurant",
+     "categories": ["Restaurant", "Cafe"]},
+
+    {"why": "has a website: the hard, deny-first rule this niche exists for",
+     "name": "Apex Plumbing Solutions", "primary": "Plumber",
+     "categories": ["Plumber"], "reviews": 20, "rating": 4.8,
+     "website": "https://apexplumbing.com"}
+  ],
+
+  "keep": [
+    {"why": "core primary category, strong name signal, corroborating reviews and rating, no website",
+     "name": "Apex Air HVAC", "primary": "HVAC contractor",
+     "categories": ["HVAC contractor"], "reviews": 20, "rating": 4.8},
+
+    {"why": "core primary category via official Google taxonomy quirk ('supplier'), no website",
+     "name": "Metro Garage Door Co", "primary": "Garage door supplier",
+     "categories": ["Garage door supplier"], "reviews": 15, "rating": 4.7},
+
+    {"why": "core category with an on-niche secondary tag that must not trigger a false deny, no website",
+     "name": "Rapid Plumbing Co", "primary": "Plumber",
+     "categories": ["Plumber", "Drain cleaning service"], "reviews": 25, "rating": 4.6},
+
+    {"why": "secondary core category via strong name signal, corroborated, no website",
+     "name": "Bluebird Electrical Services", "primary": "Contractor",
+     "categories": ["Contractor", "Electrician"], "reviews": 18, "rating": 4.9},
+
+    {"why": "young operator: few reviews at a natural 5.0, no website",
+     "name": "Northside Roofing Co", "primary": "Roofing contractor",
+     "categories": ["Roofing contractor"], "reviews": 4, "rating": 5.0}
+  ],
+
+  "low": [
+    {"why": "plausible but uncorroborated: a category claim and nothing else",
+     "name": "Vantage LLC", "primary": "Landscaper", "categories": []},
+
+    {"why": "weak name word only, with every soft bonus available applied",
+     "name": "Ridgeline Home Services", "primary": "Contractor",
+     "categories": ["Contractor"], "reviews": 40, "rating": 4.8}
+  ],
+
+  "categorize": [
+    {"why": "name and category agree",
+     "name": "Apex Air HVAC", "primary": "HVAC contractor",
+     "categories": [], "expect": "hvac"},
+
+    {"why": "name silent, specific category speaks",
+     "name": "Bluebird Electrical Services", "primary": "Electrician",
+     "categories": [], "expect": "electrical"},
+
+    {"why": "name silent, generic on-niche category maps to the broad value",
+     "name": "Ridgeline Company", "primary": "Handyman",
+     "categories": [], "expect": "handyman"},
+
+    {"why": "broad name (handyman), specific category: the specific value wins",
+     "name": "All Trades Handyman Group", "primary": "Roofer",
+     "categories": [], "expect": "roofing"},
+
+    {"why": "REFUSE: cross-family conflict, name says one trade, category says another, no combined value configured",
+     "name": "Superior Plumbing Company", "primary": "Electrician",
+     "categories": [], "expect": ""},
+
+    {"why": "REFUSE: veto word means the business is plainly something else",
+     "name": "Blue Wave Pool and Electric Services", "primary": "Electrician",
+     "categories": [], "expect": ""},
+
+    {"why": "REFUSE: category vetoes a name that otherwise reads on-niche",
+     "name": "Evergreen Lawn Services", "primary": "Real estate agency",
+     "categories": [], "expect": ""},
+
+    {"why": "REFUSE: ambiguous category covering several trades",
+     "name": "Peralta Quality Services", "primary": "General contractor",
+     "categories": [], "expect": ""},
+
+    {"why": "REFUSE: no signal anywhere",
+     "name": "Vantage LLC", "primary": "Contractor",
+     "categories": [], "expect": ""},
+
+    {"why": "surnames and place names are not trades: name silent, category specific",
+     "name": "Cabot Ridge Pest Solutions", "primary": "Pest control service",
+     "categories": [], "expect": "pest control"},
+
+    {"why": "multiple name signals across trades: genuine cross-family conflict, refuses",
+     "name": "Complete Roofing and Electrical", "primary": "Contractor",
+     "categories": [], "expect": ""}
+  ]
+}

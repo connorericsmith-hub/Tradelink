@@ -1,0 +1,713 @@
+# ============================================================================
+# cold-outreach-lead-pipeline — niche configuration
+#
+# This file is the ONLY thing you edit to run the pipeline for a new niche.
+# No source file contains a keyword, a category, a score weight, a threshold,
+# or a word of message copy. If you find yourself editing Python to change
+# who gets kept or what gets sent, that is a bug — open an issue.
+#
+# Copy to `config.yaml` and edit:
+#     cp config.example.yaml config.yaml
+#
+# Then prove your edits before touching real data:
+#     leadpipe selftest
+#
+# (or `leadpipe -c path/to/config.yaml selftest` — the flag goes BEFORE the
+# subcommand.)
+#
+# The values below are a WORKED EXAMPLE for a generic home-services niche:
+# project-based kitchen & bath remodeling contractors. They are here to show
+# the shape of a good config, not because remodeling is special. Replace them.
+# ============================================================================
+
+niche:
+  # Human-readable label. Appears in run logs and export filenames.
+  name: "kitchen and bath remodeling"
+  slug: "remodel"
+
+
+# ============================================================================
+# 1. SCRAPE — what to search for, and where
+# ============================================================================
+scrape:
+  # Search terms run against Google Maps, once per location.
+  #
+  # Be SPECIFIC. "contractor" returns roofers and plumbers; "kitchen
+  # remodeler" returns kitchen remodelers. Each keyword is a separate query
+  # per location, so the cost of a bad keyword is a whole wasted pass.
+  #
+  # 10-15 keywords is a healthy number. Overlap between them is fine and
+  # expected: dedupe happens downstream on the phone number.
+  keywords:
+    - "kitchen remodeler"
+    - "bathroom remodeler"
+    - "kitchen and bath remodeling"
+    - "home remodeling contractor"
+    - "cabinet installer"
+    - "countertop installer"
+    - "tile contractor"
+    - "basement finishing"
+    - "home addition contractor"
+    - "design build remodeler"
+    - "shower remodel"
+    - "custom cabinetry"
+
+  # Locations to scrape. `anchor` is the literal string appended to each
+  # keyword, so it must read the way a person would type it into Maps.
+  #
+  # `suburbs` are a SECOND pass over the same metro, run only after the
+  # anchor pass finishes. Use them where the money is: for most home-services
+  # niches the affluent ring outside the city limits outperforms the city
+  # centre, and Maps will not surface those businesses from the metro anchor
+  # alone.
+  #
+  # `rank` orders the run (lower runs first). `tier: 1` metros get their
+  # suburb pass; `tier: 2` metros are anchor-only. Set tier by how much you
+  # care about the metro, not by its population.
+  locations:
+    - metro: "Dallas"
+      state: "TX"
+      anchor: "Dallas TX"
+      rank: 1
+      tier: 1
+      suburbs: ["Plano TX", "Frisco TX", "Southlake TX", "Highland Park TX"]
+    - metro: "Atlanta"
+      state: "GA"
+      anchor: "Atlanta GA"
+      rank: 2
+      tier: 1
+      suburbs: ["Alpharetta GA", "Marietta GA", "Sandy Springs GA"]
+    - metro: "Phoenix"
+      state: "AZ"
+      anchor: "Phoenix AZ"
+      rank: 3
+      tier: 2
+      suburbs: []
+
+  # --- engine ---------------------------------------------------------------
+  # The Google Maps pull is delegated to an external CLI scraper. The default
+  # is gosom/google-maps-scraper, which emits the full category array per
+  # listing (most scrapers emit only the primary category — the classifier
+  # below is much weaker without the array). See SETUP.md to install it.
+  engine: "auto"            # auto | native | docker
+  native_binary: "~/go/bin/google-maps-scraper"
+  docker_image: "gosom/google-maps-scraper"
+
+  # Results to pull per query. THIS IS THE MOST IMPORTANT NUMBER HERE.
+  # A single deep pass returns meaningfully more real businesses than the
+  # same city scraped twice shallow — a re-scrape mostly re-finds what you
+  # already have, and costs you the same block risk for a fraction of the
+  # yield. Go deep once. 10 is conservative; 20 is reasonable.
+  depth: 10
+
+  concurrency: 4            # parallel queries. Lower this if you get blocked.
+  inactivity: "2m"          # abort a query that stalls this long
+  language: "en"
+  queries_per_batch: 40     # queries per scraper invocation
+
+  # Optional comma-separated proxy list. Unset means you are scraping from a
+  # single residential IP, which is free and works until it doesn't.
+  proxies_env: "LEADPIPE_PROXIES"
+
+  # --- block detection ------------------------------------------------------
+  # Google soft-bans by degrading, not by erroring. When the observed failure
+  # rate for a batch exceeds `failure_rate_threshold` the run retries once at
+  # lower concurrency; after `block_streak_limit` consecutive bad metros with
+  # no proxy configured, the run PAUSES and writes a blocker file rather than
+  # burning the IP further. Provisioning proxies is your decision, not the
+  # pipeline's.
+  failure_rate_threshold: 0.20
+  block_streak_limit: 3
+  # A metro that yields fewer than this many kept leads is flagged "thin" in
+  # the run report — usually a sign the keywords don't match local vocabulary.
+  thin_metro_threshold: 15
+
+
+# ============================================================================
+# 2. FILTER — who gets dropped, before anything is scored
+#
+# Deny-first. A listing is checked against every deny rule below BEFORE any
+# points are awarded, and a single hit is fatal — no score can rescue it.
+# This ordering is the whole design: scoring first and filtering second lets
+# a high-rating, well-reviewed, website-having plumber out-score a real
+# prospect. Deny first, then score the survivors.
+#
+# Every term is matched case-insensitively on a word boundary against the
+# business name AND against every category on the listing (Google attaches up
+# to ten; a disqualifying one can sit anywhere in that array, so all of them
+# are checked, not just the first).
+# ============================================================================
+filter:
+  # Businesses in an adjacent-but-wrong business MODEL. Kept separate from
+  # `deny_terms` only so your run report can tell you how much of your
+  # keyword yield is the wrong model vs. the wrong trade entirely — a large
+  # number here means your keywords are pulling the wrong kind of company.
+  #
+  # For this example the wrong model is recurring/maintenance service: we
+  # want project-based remodels with a real ticket size, not repeat-visit
+  # service contracts.
+  exclude_terms:
+    - "house cleaning"
+    - "maid service"
+    - "carpet cleaning"
+    - "window cleaning"
+    - "pest control"
+    - "lawn care"
+    - "pool service"
+    - "hvac maintenance"
+
+  # Off-niche entirely: other trades, retail and supply, venues, institutions.
+  # This list does the heavy lifting. Grow it from your own run reports —
+  # every batch of exports you skim will hand you two or three more.
+  deny_terms:
+    # other trades
+    - "plumber"
+    - "plumbing"
+    - "electrician"
+    # A leading-boundary prefix: "roof" catches roofer, roofing and roofline
+    # in one term. This is why deny terms are prefixes by default — trades
+    # suffix their own name and you will not think of every ending.
+    - "roof"
+    - "hvac"
+    - "landscap"
+    - "pest"
+    - "garage door"
+    - "gutter"
+    - "chimney"
+    - "septic"
+    - "sewer"
+    - "drain cleaning"
+    - "pressure washing"
+    - "junk removal"
+    - "moving company"
+    - "pool"
+    # retail / supply / manufacturing — they sell the materials, they don't
+    # do the job, and they have a front desk that will not thank you
+    - "store"
+    - "shop"
+    - "showroom"
+    - "supplier"
+    - "supply"
+    - "supplies"
+    - "materials"
+    - "wholesale"
+    - "distributor"
+    - "retail"
+    - "manufacturer"
+    - "home center"
+    - "hardware"
+    - "appliance"
+    - "furniture"
+    - "lumber"
+    # property and finance
+    - "real estate"
+    - "property management"
+    - "apartment"
+    - "mortgage"
+    - "insurance"
+    - "staging"
+    # venues and institutions
+    - "restaurant"
+    - "cafe"
+    - "coffee"
+    - "hotel"
+    - "motel"
+    - "church"
+    - "school"
+    - "university"
+    - "museum"
+    - "hospital"
+    # never an operator: trade bodies harvest the directory owner's own number
+    - "association"
+    - "chamber of commerce"
+
+  # Terms from the two lists above that only make sense as a CATEGORY.
+  #
+  # This exists because business names steal words. "Church Street Kitchens"
+  # is a real prospect; a church is not. "Coffee County Remodeling" is a real
+  # prospect; a coffee shop is not. Terms listed here are checked against the
+  # listing's categories only, never against its name.
+  category_only_terms:
+    - "restaurant"
+    - "cafe"
+    - "coffee"
+    - "hotel"
+    - "motel"
+    - "church"
+    - "school"
+    - "university"
+    - "museum"
+    - "hospital"
+    - "apartment"
+
+  # Terms short or ambiguous enough that prefix matching produces false drops.
+  # These require a WHOLE word match on both sides.
+  # ("pool" must not drop "Liverpool Kitchens"; "shop" must not drop
+  # "Workshop Interiors"; "supply" must not drop "Supplyco Design".)
+  whole_word_terms:
+    - "pool"
+    - "shop"
+    - "store"
+    - "supply"
+    - "pest"
+    - "hardware"
+
+  # Terms that disqualify only when they are the listing's PRIMARY category.
+  # A remodeler who also appears under "Flooring store" is fine; a business
+  # whose primary identity IS a flooring store is not.
+  primary_category_deny:
+    - "flooring store"
+    - "kitchen supply store"
+    - "furniture store"
+    - "interior designer"
+    - "architect"
+
+  # Review-count ceiling. Above this you are looking at a franchise, a
+  # national brand, or a lead-gen aggregator — none of which will read a text
+  # from a stranger. Tune to your niche: a busy plumber has 800 reviews and
+  # is still a one-truck shop; a remodeler with 400 is a regional player.
+  max_reviews: 120
+
+  # Drop toll-free numbers. They are answered by a call centre, they are
+  # frequently unable to receive SMS, and they bill you for the attempt.
+  # Detected offline from the number itself — no API call, no cost.
+  drop_toll_free: true
+
+
+# ============================================================================
+# 3. SCORE — how surviving listings are ranked, and what clears the bar
+#
+# Only listings that survive the whole filter above are scored. Points are
+# additive; `export_threshold` gates the exporter.
+#
+# The invariant that matters: a bare category match must NOT be able to
+# export on its own. Being listed under "Kitchen remodeler" is a claim Google
+# made, not evidence — plenty of the businesses you just denied are also
+# listed under it. At least one INDEPENDENT signal (a name that says what
+# they do, real reviews, a website) has to corroborate before you spend a
+# message. `leadpipe selftest` proves this holds for your weights and fails
+# if it doesn't.
+# ============================================================================
+score:
+  export_threshold: 50
+
+  weights:
+    core_primary_category: 40      # a core category, listed as PRIMARY
+    core_secondary_category: 30    # a core category, listed anywhere else
+                                   # (these two never stack)
+    name_signal_each: 15           # each strong signal word in the name
+    name_signal_cap: 30            # ...capped here, so a keyword-stuffed
+                                   # name can't buy its way in
+    weak_name_signal: 5            # flat bonus if any weak signal appears
+    reviews_in_band: 15            # review count inside `review_band`
+    rating_at_or_above: 10         # rating >= `rating_threshold`
+    has_website: 10
+    no_website_no_reviews: -15     # no site AND no reviews: probably a stub
+                                   # listing or a dead business
+    verified_directory: 20         # set by an enrichment pass that confirmed
+                                   # the business in a trade directory
+
+  # Reviews inside this band earn points. The UPPER bound is not a typo and
+  # is not the same as `filter.max_reviews`: a small operator with 30 reviews
+  # is the target, a 400-review regional shop is not, and the flat bonus
+  # should not reward scale. Businesses with zero reviews are not penalised
+  # here — young operators are good prospects — but see
+  # `no_website_no_reviews` above.
+  review_band: [1, 80]
+  rating_threshold: 4.3
+
+  # Categories that ARE the niche. Matching one is the single biggest signal
+  # available, which is exactly why it can't clear the bar alone.
+  #
+  # Keep this list tight. Every over-broad entry ("Contractor", "General
+  # contractor") pulls the entire construction industry to within one weak
+  # signal of your export.
+  core_categories:
+    - "kitchen remodeler"
+    - "bathroom remodeler"
+    - "remodeler"
+    - "cabinet maker"
+    - "cabinet shop"
+    - "countertop contractor"
+    - "tile contractor"
+    - "custom home builder"
+    - "basement remodeler"
+
+  # Strong signals in the business NAME. The operator chose their own name;
+  # when it names the trade, that is the best evidence you will get.
+  name_signals:
+    - "kitchen"
+    - "bath"
+    - "remodel"
+    - "renovation"
+    - "cabinet"
+    - "countertop"
+    - "design build"
+    - "design-build"
+
+  # Weak signals: consistent with the niche, but true of half of construction.
+  # Worth a nudge, never worth an export on their own. The self-test enforces
+  # that a listing whose ONLY identity signal is a weak one cannot reach the
+  # threshold even with every soft bonus applied.
+  weak_name_signals:
+    - "interiors"
+    - "construction"
+    - "builders"
+    - "home improvement"
+    - "contracting"
+
+
+# ============================================================================
+# 4. CATEGORIZE — assign each lead the one value your message merges in
+#
+# This is the field that makes the outreach personal: instead of "saw your
+# projects" the opener says "saw your kitchen remodel projects". It is worth
+# real care, because naming a trade the operator does NOT do is worse than
+# naming none at all — it proves you are a bot, on the first line, to a
+# business owner who was already suspicious.
+#
+# So the derivation is CORROBORATION-FIRST and refuses when unsure. A lead
+# with no confident value is not broken; it is routed to a sequence that
+# doesn't need one (see `messages.sequences` below). Refusing is cheap.
+# Guessing is not.
+#
+# Signals, in order of authority:
+#   1. business name    — strongest. The operator chose it.
+#   2. primary category — Google's canonical label for the business.
+#   3. category array   — everything else Google attached to the listing.
+# ============================================================================
+categorize:
+  # The CRM field this value is written to. Create it in your CRM first, as a
+  # plain text field, and put its exact key here.
+  field_name: "service_type"
+
+  # Every value the field is allowed to hold. Nothing outside this list can
+  # ever be assigned. Keep it to values that read naturally in your message —
+  # write each one into the sentence and say it out loud before adding it.
+  values:
+    - "kitchen remodel"
+    - "bathroom remodel"
+    - "kitchen and bath remodel"   # only reachable via `combined_values` below
+    - "cabinet"
+    - "countertop"
+    - "tile"
+    - "basement finishing"
+    - "home addition"
+    - "whole home remodel"
+
+  # Value families. Two values in the SAME family describe the same work at
+  # different grain, so they corroborate rather than conflict — the more
+  # specific one wins. Values in DIFFERENT families genuinely conflict, and a
+  # conflict is resolved by `combine` below.
+  families:
+    - ["kitchen remodel", "cabinet", "countertop"]
+    - ["bathroom remodel", "tile"]
+    - ["basement finishing", "home addition", "whole home remodel"]
+
+  # Most specific FIRST. Used to pick a winner within a family.
+  specificity:
+    - "countertop"
+    - "cabinet"
+    - "tile"
+    - "kitchen and bath remodel"
+    - "kitchen remodel"
+    - "bathroom remodel"
+    - "basement finishing"
+    - "home addition"
+    - "whole home remodel"
+
+  # A value so broad it is true of nearly every business in the niche, and
+  # therefore never contradicts a specific one. When the name says only this
+  # and the category says something specific, the specific value wins.
+  # Set to null if your niche has no such value.
+  broad_value: "whole home remodel"
+
+  # How to resolve a cross-family conflict (name says "kitchen", category
+  # says "bathroom"):
+  #   refuse    — assign nothing, route to the generic sequence. Safest.
+  #   combined  — look the pair up in `combined_values`; refuse if absent.
+  combine: "combined"
+
+  combined_values:
+    - when: ["kitchen remodel", "bathroom remodel"]
+      value: "kitchen and bath remodel"
+
+  # Name patterns -> value. Regex, matched case-insensitively against the
+  # business name. Most specific first; the first match per family wins.
+  #
+  # ALWAYS anchor with \b. Without it, "Cabinetry" matches inside surnames
+  # and place names and you will confidently tell a general contractor in
+  # Cabot, Arkansas that you admire their cabinet work.
+  name_patterns:
+    - pattern: '\bkitchen'
+      value: "kitchen remodel"
+    - pattern: '\b(?:bath|bathroom)\b'
+      value: "bathroom remodel"
+    - pattern: '\bshower\b'
+      value: "bathroom remodel"
+    - pattern: '\bcabinet'
+      value: "cabinet"
+    - pattern: '\bcountertop|\bgranite\b|\bquartz\b'
+      value: "countertop"
+    - pattern: '\btile\b|\btiling\b'
+      value: "tile"
+    - pattern: '\bbasement'
+      value: "basement finishing"
+    - pattern: '\baddition(?:s)?\b'
+      value: "home addition"
+    # Least specific, so it goes last: this is the `broad_value`, and when a
+    # name says only this while the category names a real trade, the category
+    # wins. ("Whole Home Remodel Group" listed as a bathroom remodeler is a
+    # bathroom remodeler.)
+    - pattern: '\bwhole home\b|\bhome remodel'
+      value: "whole home remodel"
+
+  # Primary category -> value. ONLY categories naming one unambiguous trade.
+  #
+  # Deliberately absent, and worth understanding before you add them back:
+  # "Contractor", "General contractor", "Construction company", "Remodeler",
+  # "Handyman". Each covers several trades at once, so a value derived from
+  # one is a guess wearing a category's authority.
+  primary_patterns:
+    "kitchen remodeler": "kitchen remodel"
+    "bathroom remodeler": "bathroom remodel"
+    "cabinet maker": "cabinet"
+    "cabinet shop": "cabinet"
+    "countertop contractor": "countertop"
+    "tile contractor": "tile"
+    "basement remodeler": "basement finishing"
+
+  # Categories that name real, on-niche work but not a specific job type.
+  # Assigned only when nothing more specific is available. Including these
+  # is usually a large coverage win — measure it with
+  # `leadpipe export --dry-run`, which reports what fraction of your leads
+  # carry a value.
+  generic_primary_patterns:
+    "remodeler": "whole home remodel"
+    "custom home builder": "whole home remodel"
+
+  # Category-array terms -> value. Used to corroborate a name signal or to
+  # break a tie between two of them. Never assigns on its own unless it is
+  # the only signal present.
+  category_patterns:
+    "kitchen remodeler": "kitchen remodel"
+    "bathroom remodeler": "bathroom remodel"
+    "cabinet maker": "cabinet"
+    "countertop contractor": "countertop"
+    "tile contractor": "tile"
+
+  # VETO. If any of these match the name or the primary category, the lead
+  # gets NO value at all — including one derived from its own name.
+  #
+  # This list is the most valuable thing in this section and the least
+  # obvious. Category data is dirty in a specific, dangerous way: Google will
+  # label a marine contractor "Deck builder" and a boat detailer "Deck
+  # builder", and your pipeline will cheerfully compliment their decking.
+  # The name is the more reliable witness. When the name says the business is
+  # plainly something else, believe the name and assign nothing.
+  #
+  # Seed this from your first real export: skim 200 rows, and every time a
+  # value makes you wince, the word that caused it goes here.
+  veto_patterns:
+    - '\bplumb'
+    - '\belectric'
+    - '\broof'
+    - '\bhvac\b'
+    - '\bpool(?:s)?\b'
+    - '\bspa(?:s)?\b'
+    - '\bgutter'
+    - '\bsiding\b'
+    - '\bchimney'
+    - '\bjunk\b'
+    - '\bpressure wash'
+    - '\bcar wash'
+    - '\bautomotive\b'
+    - '\bmoving\b'
+    - '\bstorage\b'
+    - '\bself[- ]stor'
+    - '\breal estate\b'
+    - '\bcleaning\b'
+    - '\blandscap'
+    - '\btree (?:service|removal|care|trimming)'
+
+
+# ============================================================================
+# 5. EXPORT — CRM-ready CSV batches
+# ============================================================================
+export:
+  # Rows per file. Most CRM importers choke somewhere above a few thousand.
+  batch_size: 1000
+
+  # Filename prefix and the send_status stamp written back to the local
+  # store. CHANGE THIS if you have imported batches into your CRM before
+  # under another name — colliding batch labels make it impossible to tell
+  # which import a contact came from, and you will discover this while
+  # trying to work out who has already been messaged.
+  series: "leads_batch"
+
+  output_dir: "out/export"
+
+  # CSV columns. `source` is a field on the lead record; `header` is the
+  # column name your CRM importer expects. Add rows here to carry extra
+  # fields through to the CRM.
+  columns:
+    - source: "phone"
+      header: "Phone"
+    - source: "company"
+      header: "Company Name"
+    - source: "city"
+      header: "City"
+    - source: "state"
+      header: "State"
+    - source: "category_value"
+      header: "service_type"
+
+  # A lead with no business name is not exportable — there is no way to
+  # address it and nothing to verify it against.
+  require_company_name: true
+
+
+# ============================================================================
+# 6. MESSAGES — the sequence, and the QA that runs before anything sends
+#
+# This pipeline does not send. It prepares leads and hands them to your CRM,
+# which owns delivery. What it DOES do is render every message for every lead
+# and refuse to export leads that would produce a broken one.
+#
+# Two rules, both enforced automatically:
+#
+#   1. A lead missing any merge field its sequence uses is not sent that
+#      sequence. Not sent with a blank, not sent with a fallback word —
+#      routed to a sequence that doesn't need the field, or skipped.
+#
+#   2. Characters outside GSM-7 silently switch the whole message to UCS-2,
+#      which cuts the per-segment length from 160 to 70 and roughly triples
+#      what you pay to send it. Curly quotes pasted from a word processor are
+#      the usual culprit and are invisible on screen.
+#
+# Sequences are tried IN ORDER. Each lead gets the first one whose `requires`
+# fields it actually has. This is a structural split, not a fallback string:
+# a lead with no category value never enters the personalized sequence at
+# all, so the merge field cannot render empty.
+# ============================================================================
+messages:
+  # Fields available to `{field}` placeholders. `category_value` is whatever
+  # section 4 assigned. Anything not listed here is a config error, caught by
+  # the self-test rather than by a customer.
+  merge_fields: ["company", "city", "state", "category_value"]
+
+  encoding:
+    enforce_gsm7: true      # fail QA on characters that force UCS-2
+    auto_sanitize: true     # rewrite curly quotes, en/em dashes, ellipsis,
+                            # and non-breaking spaces to GSM-7 equivalents
+                            # before checking
+    allow_emoji: false      # emoji are never GSM-7. Setting this true is a
+                            # deliberate choice to pay UCS-2 rates for tone;
+                            # it is a real tradeoff, not a mistake, but make
+                            # it on purpose.
+
+  sequences:
+    # ---- personalized: only for leads that got a category value ----------
+    - name: "personalized"
+      requires: ["category_value"]
+      messages:
+        - delay: "0m"
+          body: "hi, this is [NAME] in [CITY]. saw your {category_value} work on google. we book [NICHE] crews their own leads, not shared. worth a look or no?"
+        - delay: "30m"
+          body: "real person btw, not a call center. me and one partner, that's the whole company. if it's a no just say so and i'm gone."
+        - delay: "24h"
+          body: "last one from me. happy to show what it'd look like for a {category_value} shop your size. yes or no both work."
+
+    # ---- generic: everyone else. Uses no category field, by design -------
+    # `company` is guaranteed by export.require_company_name, so a sequence
+    # requiring only it is a catch-all: every exportable lead qualifies.
+    - name: "generic"
+      requires: ["company"]
+      messages:
+        - delay: "0m"
+          body: "hi, this is [NAME] in [CITY]. came across {company} on google. we book [NICHE] crews their own leads, not shared. worth a look or no?"
+        - delay: "30m"
+          body: "real person btw, not a call center. me and one partner, that's the whole company. if it's a no just say so and i'm gone."
+        - delay: "24h"
+          body: "last one from me. happy to show what it'd look like for a shop your size. yes or no both work."
+
+
+# ============================================================================
+# 7. COMPLIANCE — quiet hours, and what the pipeline will not do for you
+# ============================================================================
+compliance:
+  quiet_hours:
+    # Send window in the LEAD's local time, not yours. A 9am send from
+    # Phoenix lands at 6am in Boston.
+    earliest: "08:00"
+    latest: "21:00"
+
+    # lead_state — derive the lead's timezone from its state (US only; map
+    #              below, already filled in).
+    # fixed      — everyone is treated as being in `fixed_timezone`. Only
+    #              correct if you scrape a single timezone.
+    timezone_source: "lead_state"
+    fixed_timezone: "America/Chicago"
+
+    # States spanning two zones are mapped to the zone holding most of the
+    # population. If you scrape rural Idaho, Oregon, or the Florida panhandle
+    # heavily, tighten `earliest` rather than trusting this map.
+    state_timezones: {
+      AL: America/Chicago,     AK: America/Anchorage,   AZ: America/Phoenix,
+      AR: America/Chicago,     CA: America/Los_Angeles, CO: America/Denver,
+      CT: America/New_York,    DE: America/New_York,    DC: America/New_York,
+      FL: America/New_York,    GA: America/New_York,    HI: Pacific/Honolulu,
+      ID: America/Boise,       IL: America/Chicago,     IA: America/Chicago,
+      IN: America/Indiana/Indianapolis,                 KS: America/Chicago,
+      KY: America/New_York,    LA: America/Chicago,     ME: America/New_York,
+      MD: America/New_York,    MA: America/New_York,    MI: America/Detroit,
+      MN: America/Chicago,     MS: America/Chicago,     MO: America/Chicago,
+      MT: America/Denver,      NE: America/Chicago,     NV: America/Los_Angeles,
+      NH: America/New_York,    NJ: America/New_York,    NM: America/Denver,
+      NY: America/New_York,    NC: America/New_York,    ND: America/Chicago,
+      OH: America/New_York,    OK: America/Chicago,     OR: America/Los_Angeles,
+      PA: America/New_York,    RI: America/New_York,    SC: America/New_York,
+      SD: America/Chicago,     TN: America/Chicago,     TX: America/Chicago,
+      UT: America/Denver,      VT: America/New_York,    VA: America/New_York,
+      WA: America/Los_Angeles, WV: America/New_York,    WI: America/Chicago,
+      WY: America/Denver
+    }
+
+  # Line-type verification.
+  #
+  # Read this before you set it to `none` and forget about it. A landline
+  # comes back "valid" from every cheap validation API on the market. It is a
+  # real, correctly-formatted, in-service number that simply cannot receive a
+  # text — and you are billed for every attempt to send one. On a scraped
+  # list of small businesses, landlines are not a rounding error.
+  #
+  #   none    — no check. Toll-free numbers are still dropped offline in
+  #             section 2, but landlines will reach your export.
+  #   crm     — your CRM screens line type at send time. Many do; confirm
+  #             yours actually does before relying on it.
+  #   webhook — POST {"phone": "+1..."} to LEADPIPE_LINETYPE_URL, expecting
+  #             {"line_type": "mobile"|"landline"|"voip"|"toll_free"}.
+  #             Anything not in `accept_line_types` is dropped at export.
+  verification:
+    mode: "crm"
+    accept_line_types: ["mobile", "voip"]
+
+  # Numbers here are never exported again, whatever their score or status.
+  # The exporter appends every phone it exports; you can hand-append too.
+  # One E.164 per line, '#' comments allowed.
+  suppression_file: "data/suppression.txt"
+
+
+# ============================================================================
+# 8. STORAGE
+# ============================================================================
+storage:
+  # Local SQLite file. `phone_e164` is UNIQUE, which is what makes re-running
+  # the scraper safe: a repeat scrape enriches the existing row instead of
+  # creating a duplicate lead, and never overwrites export state.
+  database: "data/leads.db"
+
+  # Working directory for scraper input/output and retained raw results.
+  # Raw scraper output is kept, never rotated: re-scraping to recover it costs
+  # you a block allowance you may not have, and disk is cheaper than that.
+  data_dir: "data"
