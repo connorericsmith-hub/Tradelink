@@ -1,0 +1,60 @@
+# ---------------------------------------------------------------------------
+# Secrets and local configuration
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+# config.yaml IS tracked here on purpose: this is our own deployed niche
+# config, not upstream's template repo, and it carries no secrets — the real
+# credentials live in .env, which stays ignored below.
+config.yml
+config.local.yaml
+*.pem
+*.key
+credentials.json
+token.json
+
+# ---------------------------------------------------------------------------
+# Lead data. Nothing that has ever touched a real business belongs in git.
+#
+# These are broad on purpose. A stray CSV of scraped phone numbers in a public
+# repo is a data-protection problem and a gift to your competitors, and the
+# usual way it happens is someone adding `results.csv` to the root and running
+# `git add -A` without looking.
+# ---------------------------------------------------------------------------
+data/
+out/
+logs/
+*.db
+*.sqlite
+*.sqlite3
+*.csv
+*.jsonl
+suppression*.txt
+!tests/fixtures/*
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---------------------------------------------------------------------------
+# Editors and OS
+# ---------------------------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+*.swp

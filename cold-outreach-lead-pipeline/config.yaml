@@ -1,0 +1,523 @@
+# ============================================================================
+# cold-outreach-lead-pipeline — niche configuration
+# Niche: multi-trade home services prospects with NO existing website
+# (HVAC, plumbing, roofing, electrical primary; landscaping, handyman,
+#  garage door, pest control, pressure washing secondary)
+#
+# Offer: website-building for local trade businesses. `filter.require_no_website`
+# is a custom addition (see src/leadpipe/classify.py) — the shipped pipeline
+# only scores "has a website" as a soft signal, but this niche needs it as a
+# hard, deny-first exclusion, so a small source patch added the option.
+# ============================================================================
+
+niche:
+  name: "no-website home services prospects"
+  slug: "nowebsite-homeservices"
+
+
+# ============================================================================
+# 1. SCRAPE
+# ============================================================================
+scrape:
+  # Primary four trades get 2-3 keywords each; secondary trades get 1-2.
+  keywords:
+    - "hvac repair"
+    - "hvac contractor"
+    - "air conditioning repair"
+    - "plumber"
+    - "plumbing contractor"
+    - "roofing contractor"
+    - "roofer"
+    - "electrician"
+    - "electrical contractor"
+    - "landscaping company"
+    - "lawn care service"
+    - "handyman service"
+    - "garage door repair"
+    - "pest control service"
+    - "pressure washing service"
+
+  # 20 metros, broad national spread. Suburb rings intentionally left empty
+  # for the first pass — see the run-order recommendation below. Add suburbs
+  # per metro once you've validated a metro's yield is worth the second pass.
+  locations:
+    - { metro: "Atlanta",        state: "GA", anchor: "Atlanta GA",        rank: 1,  tier: 2, suburbs: [] }
+    - { metro: "Charlotte",      state: "NC", anchor: "Charlotte NC",      rank: 2,  tier: 2, suburbs: [] }
+    - { metro: "Nashville",      state: "TN", anchor: "Nashville TN",      rank: 3,  tier: 2, suburbs: [] }
+    - { metro: "Jacksonville",   state: "FL", anchor: "Jacksonville FL",   rank: 4,  tier: 2, suburbs: [] }
+    - { metro: "Tampa",          state: "FL", anchor: "Tampa FL",          rank: 5,  tier: 2, suburbs: [] }
+    - { metro: "Phoenix",        state: "AZ", anchor: "Phoenix AZ",        rank: 6,  tier: 2, suburbs: [] }
+    - { metro: "Las Vegas",      state: "NV", anchor: "Las Vegas NV",      rank: 7,  tier: 2, suburbs: [] }
+    - { metro: "Dallas",         state: "TX", anchor: "Dallas TX",         rank: 8,  tier: 2, suburbs: [] }
+    - { metro: "Houston",        state: "TX", anchor: "Houston TX",        rank: 9,  tier: 2, suburbs: [] }
+    - { metro: "San Antonio",    state: "TX", anchor: "San Antonio TX",    rank: 10, tier: 2, suburbs: [] }
+    - { metro: "Kansas City",    state: "MO", anchor: "Kansas City MO",    rank: 11, tier: 2, suburbs: [] }
+    - { metro: "St. Louis",      state: "MO", anchor: "St. Louis MO",      rank: 12, tier: 2, suburbs: [] }
+    - { metro: "Columbus",       state: "OH", anchor: "Columbus OH",       rank: 13, tier: 2, suburbs: [] }
+    - { metro: "Indianapolis",   state: "IN", anchor: "Indianapolis IN",   rank: 14, tier: 2, suburbs: [] }
+    - { metro: "Sacramento",     state: "CA", anchor: "Sacramento CA",     rank: 15, tier: 2, suburbs: [] }
+    - { metro: "Portland",       state: "OR", anchor: "Portland OR",       rank: 16, tier: 2, suburbs: [] }
+    - { metro: "Denver",         state: "CO", anchor: "Denver CO",         rank: 17, tier: 2, suburbs: [] }
+    - { metro: "Oklahoma City",  state: "OK", anchor: "Oklahoma City OK",  rank: 18, tier: 2, suburbs: [] }
+    - { metro: "Memphis",        state: "TN", anchor: "Memphis TN",        rank: 19, tier: 2, suburbs: [] }
+    - { metro: "Richmond",       state: "VA", anchor: "Richmond VA",       rank: 20, tier: 2, suburbs: [] }
+
+  engine: "auto"
+  native_binary: "~/go/bin/google-maps-scraper"
+  docker_image: "gosom/google-maps-scraper"
+
+  depth: 10
+
+  # Lowered from the shipped default (4) — 20 metros x 15 keywords is a large
+  # run and a lower concurrency reduces block risk. Raise later once you've
+  # watched a few batches complete cleanly.
+  concurrency: 3
+  inactivity: "2m"
+  language: "en"
+  queries_per_batch: 40
+
+  proxies_env: "LEADPIPE_PROXIES"
+
+  failure_rate_threshold: 0.20
+  block_streak_limit: 3
+  thin_metro_threshold: 15
+
+
+# ============================================================================
+# 2. FILTER
+# ============================================================================
+filter:
+  # NEW: hard-deny any listing that has a website populated. Checked first,
+  # before any other rule — the offer is building a site, so a business that
+  # already has one is never a prospect regardless of trade or score.
+  require_no_website: true
+
+  # Wrong business model: competitors and lead-gen platforms your keywords
+  # might incidentally surface, not a real trade business.
+  exclude_terms:
+    - "angi"
+    - "homeadvisor"
+    - "thumbtack"
+    - "porch"
+    - "networx"
+    - "web design"
+    - "website design"
+    - "digital marketing"
+    - "marketing agency"
+    - "seo agency"
+    - "advertising agency"
+
+  # Off-niche entirely: other trades and retail/venue/institution noise.
+  # Deliberately does NOT include hvac / plumb / roof / electric / landscap /
+  # handyman / garage door / pest / pressure wash — those are the target
+  # trades in this config, not deny terms.
+  #
+  # Also deliberately excludes "gutter", "chimney", "septic", "sewer", and
+  # "drain cleaning": these commonly show up as a SECONDARY category on
+  # legitimate roofing and plumbing listings, and since every category is
+  # checked, denying them would silently drop real prospects in your primary
+  # trades.
+  deny_terms:
+    # other construction/remodeling trades, not in scope
+    - "kitchen remodel"
+    - "bathroom remodel"
+    - "cabinet"
+    - "countertop"
+    - "flooring"
+    - "painter"
+    - "painting contractor"
+    - "fence"
+    - "fencing"
+    - "concrete contractor"
+    - "masonry"
+    - "paving"
+    - "drywall"
+    - "tree service"
+    - "pool"
+    - "spa"
+    # cleaning / hauling — different business model
+    - "house cleaning"
+    - "maid service"
+    - "carpet cleaning"
+    - "janitorial"
+    - "junk removal"
+    - "moving company"
+    # retail / supply — specific compound phrases only. Bare "supplier" or
+    # "supply" is deliberately NOT here: Google's actual category name for
+    # garage door businesses is "Garage door supplier", and a bare deny term
+    # would wipe out that entire target trade.
+    - "hardware store"
+    - "kitchen supply"
+    - "building supply"
+    - "building materials"
+    - "paint store"
+    - "tile store"
+    - "flooring store"
+    - "furniture store"
+    - "appliance store"
+    - "lumber yard"
+    - "wholesale"
+    - "distributor"
+    - "retail"
+    - "manufacturer"
+    # property and finance
+    - "real estate"
+    - "property management"
+    - "apartment"
+    - "mortgage"
+    - "insurance"
+    - "staging"
+    # venues and institutions
+    - "restaurant"
+    - "cafe"
+    - "coffee"
+    - "hotel"
+    - "motel"
+    - "church"
+    - "school"
+    - "university"
+    - "museum"
+    - "hospital"
+    # trade bodies
+    - "association"
+    - "chamber of commerce"
+
+  category_only_terms:
+    - "restaurant"
+    - "cafe"
+    - "coffee"
+    - "hotel"
+    - "motel"
+    - "church"
+    - "school"
+    - "university"
+    - "museum"
+    - "hospital"
+    - "apartment"
+
+  whole_word_terms:
+    - "pool"
+    - "spa"
+    - "retail"
+
+  # Disqualify only when it's the listing's PRIMARY category — these can be
+  # legitimate secondary tags on a real trade business.
+  primary_category_deny:
+    - "general contractor"
+    - "construction company"
+    - "interior designer"
+    - "architect"
+    - "real estate agency"
+    - "insurance agency"
+    - "web design company"
+    - "marketing agency"
+    - "flooring store"
+    - "furniture store"
+    - "hardware store"
+    - "appliance store"
+
+  # Higher than the shipped remodeling default (120) — trades like plumbing,
+  # HVAC and electrical routinely carry review counts a one-truck operator
+  # in remodeling wouldn't. Tune down if you see franchises slip through.
+  max_reviews: 250
+
+  drop_toll_free: true
+
+
+# ============================================================================
+# 3. SCORE
+# ============================================================================
+score:
+  export_threshold: 50
+
+  weights:
+    core_primary_category: 40
+    core_secondary_category: 30
+    name_signal_each: 15
+    name_signal_cap: 30
+    weak_name_signal: 5
+    reviews_in_band: 15
+    rating_at_or_above: 10
+    has_website: 10
+    # Zeroed out (shipped default is -15). With require_no_website active,
+    # EVERY surviving lead has no website by construction, so "no website and
+    # no reviews" is no longer a stub/dead-business signal here — it is
+    # exactly the profile of a good, newer prospect. Penalizing it would
+    # unfairly score down the leads this niche most wants.
+    no_website_no_reviews: 0
+    verified_directory: 20
+
+  review_band: [1, 80]
+  rating_threshold: 4.3
+
+  core_categories:
+    - "hvac contractor"
+    - "air conditioning contractor"
+    - "air conditioning repair service"
+    - "heating contractor"
+    - "plumber"
+    - "plumbing contractor"
+    - "roofing contractor"
+    - "roofer"
+    - "electrician"
+    - "electrical contractor"
+    - "landscaper"
+    - "landscaping company"
+    - "lawn care service"
+    - "handyman service"
+    - "handyman"
+    - "garage door supplier"
+    - "pest control service"
+    - "pressure washing service"
+
+  name_signals:
+    - "hvac"
+    - "heating"
+    - "cooling"
+    - "air conditioning"
+    - "plumb"
+    - "roof"
+    - "electric"
+    - "landscap"
+    - "lawn care"
+    - "garage door"
+    - "pest control"
+    - "pressure wash"
+
+  weak_name_signals:
+    - "handyman"
+    - "home services"
+    - "contracting"
+    - "solutions"
+    - "pros"
+
+
+# ============================================================================
+# 4. CATEGORIZE
+# ============================================================================
+categorize:
+  field_name: "trade_type"
+
+  values:
+    - "hvac"
+    - "plumbing"
+    - "roofing"
+    - "electrical"
+    - "landscaping"
+    - "garage door"
+    - "pest control"
+    - "pressure washing"
+    - "handyman"
+
+  # No families: these are 9 independent trades, not the same work at
+  # different grain. A business whose name/category signals TWO different
+  # trades is a genuine cross-family conflict and gets refused (see
+  # `combine` below) rather than guessed.
+
+  # Most specific first. "handyman" last: it's the catch-all/broad value.
+  specificity:
+    - "hvac"
+    - "plumbing"
+    - "roofing"
+    - "electrical"
+    - "landscaping"
+    - "garage door"
+    - "pest control"
+    - "pressure washing"
+    - "handyman"
+
+  # "Handyman" in the name says almost nothing (true of many multi-trade
+  # operators). When the category names a specific trade, the specific one
+  # wins — same idiom as the shipped example's "whole home remodel".
+  broad_value: "handyman"
+
+  combine: "refuse"
+
+  name_patterns:
+    - { pattern: '\bhvac\b', value: "hvac" }
+    - { pattern: '\bheating\b|\bair conditioning\b|\bcooling\b', value: "hvac" }
+    - { pattern: '\bplumb', value: "plumbing" }
+    - { pattern: '\broof', value: "roofing" }
+    - { pattern: '\belectric', value: "electrical" }
+    - { pattern: '\blandscap', value: "landscaping" }
+    - { pattern: '\blawn care\b', value: "landscaping" }
+    - { pattern: '\bgarage door', value: "garage door" }
+    - { pattern: '\bpest control\b|\bpest\b', value: "pest control" }
+    - { pattern: '\bpressure wash', value: "pressure washing" }
+    - { pattern: '\bhandyman\b', value: "handyman" }
+
+  primary_patterns:
+    "hvac contractor": "hvac"
+    "air conditioning contractor": "hvac"
+    "air conditioning repair service": "hvac"
+    "heating contractor": "hvac"
+    "plumber": "plumbing"
+    "plumbing contractor": "plumbing"
+    "roofing contractor": "roofing"
+    "roofer": "roofing"
+    "electrician": "electrical"
+    "electrical contractor": "electrical"
+    "landscaper": "landscaping"
+    "landscaping company": "landscaping"
+    "lawn care service": "landscaping"
+    "garage door supplier": "garage door"
+    "pest control service": "pest control"
+    "pressure washing service": "pressure washing"
+    "handyman service": "handyman"
+    "handyman": "handyman"
+
+  category_patterns:
+    "hvac contractor": "hvac"
+    "air conditioning contractor": "hvac"
+    "heating contractor": "hvac"
+    "plumber": "plumbing"
+    "plumbing contractor": "plumbing"
+    "roofing contractor": "roofing"
+    "roofer": "roofing"
+    "electrician": "electrical"
+    "electrical contractor": "electrical"
+    "landscaper": "landscaping"
+    "landscaping company": "landscaping"
+    "lawn care service": "landscaping"
+    "garage door supplier": "garage door"
+    "pest control service": "pest control"
+    "pressure washing service": "pressure washing"
+
+  # Believe the name over a misleading category. Kept scoped to real
+  # off-trade phrases so it can't accidentally veto one of our own trades
+  # (e.g. NOT a bare "cleaning", which would veto a pressure-washing company
+  # whose name happens to include the word).
+  veto_patterns:
+    - '\breal estate\b'
+    - '\bmortgage\b'
+    - '\binsurance\b'
+    - '\bproperty management\b'
+    - '\bhouse cleaning\b'
+    - '\bmaid service\b'
+    - '\bcarpet clean'
+    - '\bjanitorial\b'
+    - '\bmoving\b'
+    - '\bself[- ]stor'
+    - '\bstorage\b'
+    - '\bcar wash\b'
+    - '\bautomotive\b'
+    - '\bpool(?:s)?\b'
+    - '\bspa(?:s)?\b'
+    - '\btree (?:service|removal|care|trimming)'
+    - '\bweb design\b'
+    - '\bmarketing agency\b'
+    - '\bseo\b'
+
+
+# ============================================================================
+# 5. EXPORT
+# ============================================================================
+export:
+  batch_size: 1000
+  series: "leads_batch"
+  output_dir: "out/export"
+
+  # Mapped to GoHighLevel's standard contact-import headers. GHL lets you
+  # remap columns by hand during import regardless of header text, but using
+  # its own field names means the wizard auto-matches them.
+  #
+  # No "First Name" / "Last Name" / "Email" columns: Google Maps business
+  # listings carry neither an owner's name nor an email address, and this
+  # pipeline never fabricates a merge field it can't back with real data. GHL
+  # will accept contacts with Business Name + Phone alone; if your GHL
+  # pipeline requires a First/Last Name to save a contact, set one manually
+  # in GHL's import mapping step (e.g. default First Name to "Team").
+  columns:
+    - { source: "phone", header: "Phone" }
+    - { source: "company", header: "Business Name" }
+    - { source: "address", header: "Address" }
+    - { source: "city", header: "City" }
+    - { source: "state", header: "State" }
+    - { source: "category_value", header: "trade_type" }
+
+  require_company_name: true
+
+
+# ============================================================================
+# 6. MESSAGES
+# ============================================================================
+messages:
+  merge_fields: ["company", "city", "state", "category_value"]
+
+  encoding:
+    enforce_gsm7: true
+    auto_sanitize: true
+    allow_emoji: false
+
+  sequences:
+    # personalized: leads whose trade we're confident about
+    - name: "personalized"
+      requires: ["category_value", "city"]
+      messages:
+        - delay: "0m"
+          body: "hi, this is [NAME]. saw {company}'s {category_value} work in {city} on google - no website though. i build sites for trades, want a quick mockup?"
+        - delay: "30m"
+          body: "real person, not a call center - just me. no pressure, if it's a no just say so and i'll stop."
+        - delay: "24h"
+          body: "last one from me. happy to send a free mockup for {company}. yes or no both work."
+
+    # generic: catch-all, every exportable lead qualifies (company guaranteed)
+    - name: "generic"
+      requires: ["company"]
+      messages:
+        - delay: "0m"
+          body: "hi, this is [NAME]. came across {company} on google - noticed no website yet. i build sites for trades, want a quick mockup?"
+        - delay: "30m"
+          body: "real person, not a call center - just me. no pressure, if it's a no just say so and i'll stop."
+        - delay: "24h"
+          body: "last one from me. happy to send a free mockup for {company}. yes or no both work."
+
+
+# ============================================================================
+# 7. COMPLIANCE
+# ============================================================================
+compliance:
+  quiet_hours:
+    earliest: "08:00"
+    latest: "21:00"
+    timezone_source: "lead_state"
+    fixed_timezone: "America/Chicago"
+    state_timezones: {
+      AL: America/Chicago,     AK: America/Anchorage,   AZ: America/Phoenix,
+      AR: America/Chicago,     CA: America/Los_Angeles, CO: America/Denver,
+      CT: America/New_York,    DE: America/New_York,    DC: America/New_York,
+      FL: America/New_York,    GA: America/New_York,    HI: Pacific/Honolulu,
+      ID: America/Boise,       IL: America/Chicago,     IA: America/Chicago,
+      IN: America/Indiana/Indianapolis,                 KS: America/Chicago,
+      KY: America/New_York,    LA: America/Chicago,     ME: America/New_York,
+      MD: America/New_York,    MA: America/New_York,    MI: America/Detroit,
+      MN: America/Chicago,     MS: America/Chicago,     MO: America/Chicago,
+      MT: America/Denver,      NE: America/Chicago,     NV: America/Los_Angeles,
+      NH: America/New_York,    NJ: America/New_York,    NM: America/Denver,
+      NY: America/New_York,    NC: America/New_York,    ND: America/Chicago,
+      OH: America/New_York,    OK: America/Chicago,     OR: America/Los_Angeles,
+      PA: America/New_York,    RI: America/New_York,    SC: America/New_York,
+      SD: America/Chicago,     TN: America/Chicago,     TX: America/Chicago,
+      UT: America/Denver,      VT: America/New_York,    VA: America/New_York,
+      WA: America/Los_Angeles, WV: America/New_York,    WI: America/Chicago,
+      WY: America/Denver
+    }
+
+  # "crm" is correct for GoHighLevel's "Number Intelligence" feature, which
+  # screens line type at send time — but only if it is actually TURNED ON in
+  # your GHL account/workflow. This pipeline has no way to verify that from
+  # its side; it is trusting the CRM. Number Intelligence is a paid GHL
+  # add-on, billed per lookup or bundled by plan.
+  verification:
+    mode: "crm"
+    accept_line_types: ["mobile", "voip"]
+
+  suppression_file: "data/suppression.txt"
+
+
+# ============================================================================
+# 8. STORAGE
+# ============================================================================
+storage:
+  database: "data/leads.db"
+  data_dir: "data"
